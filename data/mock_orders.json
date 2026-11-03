@@ -1,0 +1,35 @@
+
+[
+  {
+    "order_id": "ORD1001",
+    "customer_id": "CUST001",
+    "status": "Shipped",
+    "tracking_number": "TRK5001",
+    "items": ["Wireless Headphones"],
+    "order_date": "2026-10-08"
+  },
+  {
+    "order_id": "ORD1002",
+    "customer_id": "CUST002",
+    "status": "Delivered",
+    "tracking_number": "TRK5002",
+    "items": ["Running Shoes"],
+    "order_date": "2026-10-05"
+  },
+  {
+    "order_id": "ORD1003",
+    "customer_id": "CUST001",
+    "status": "Processing",
+    "tracking_number": null,
+    "items": ["Laptop Stand", "USB-C Hub"],
+    "order_date": "2026-10-12"
+  },
+  {
+    "order_id": "ORD1004",
+    "customer_id": "CUST003",
+    "status": "Shipped",
+    "tracking_number": "TRK5004",
+    "items": ["Backpack"],
+    "order_date": "2026-10-10"
+  }
+]

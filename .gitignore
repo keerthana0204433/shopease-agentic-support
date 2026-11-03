@@ -1,0 +1,19 @@
+# Environment variables and secrets
+.env
+.env.*
+
+# Python virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Chroma local database
+data/chroma_db/
+
+# Olist dataset (large historical CSV files)
+data/olist/
+
+# macOS files
+.DS_Store
