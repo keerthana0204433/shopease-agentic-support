@@ -1,45 +1,30 @@
 
-from datetime import date
-
-from order_tools import get_order_by_id
 from refund_tools import check_refund_eligibility
 
 
 def prepare_refund_request(
-    order_id: str,
+    order: dict,
     customer_unique_id: str,
     reason: str,
     request_date: str,
+    policy_context: str,
     item_unused: bool | None = None,
     original_packaging: bool | None = None,
     damage_reported_date: str | None = None,
     is_personalized_or_digital: bool | None = None,
 ):
-    """
-    Fetches an order, checks refund eligibility,
-    and prepares a request for human approval.
-
-    This function does not approve or execute refunds.
-    """
-
-    # 1. Fetch and authorize the order
-    order_result = get_order_by_id(
-        order_id=order_id,
-        authenticated_customer_unique_id=customer_unique_id
-    )
-
-    if not order_result.get("success"):
+    if not order:
         return {
             "success": False,
-            "message": order_result.get(
-                "message",
-                "Unable to retrieve order."
-            )
+            "message": "Order information is unavailable."
         }
 
-    order = order_result["order"]
+    if not policy_context or not policy_context.strip():
+        return {
+            "success": False,
+            "message": "Refund policy evidence could not be retrieved."
+        }
 
-    # 2. Check eligibility
     eligibility = check_refund_eligibility(
         order=order,
         reason=reason,
@@ -50,7 +35,6 @@ def prepare_refund_request(
         is_personalized_or_digital=is_personalized_or_digital,
     )
 
-    # 3. Calculate item subtotal
     try:
         item_subtotal = sum(
             float(item["price"])
@@ -62,7 +46,6 @@ def prepare_refund_request(
             "message": "Unable to calculate the order amount."
         }
 
-    # 4. Prepare refund request
     refund_request = {
         "order_id": order["order_id"],
         "customer_unique_id": customer_unique_id,
@@ -72,6 +55,7 @@ def prepare_refund_request(
         "currency": "BRL",
         "eligibility_status": eligibility["status"],
         "eligibility_reasons": eligibility["reasons"],
+        "policy_evidence": policy_context,
         "approval_status": "PENDING",
         "execution_status": "NOT_EXECUTED"
     }

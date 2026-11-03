@@ -1,12 +1,15 @@
 
 from typing import TypedDict, Literal
+from pathlib import Path
 
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import interrupt, Command
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.types import interrupt
 
 
-# 1. Define the state shared across workflow nodes
+PROJECT_DIR = Path(__file__).resolve().parent
+CHECKPOINT_DB = PROJECT_DIR / "data" / "refund_checkpoints.sqlite"
+
 
 class RefundState(TypedDict, total=False):
     refund_request: dict
@@ -16,13 +19,9 @@ class RefundState(TypedDict, total=False):
     final_message: str
 
 
-# 2. Pause the workflow and request human approval
-
 def human_approval(state: RefundState):
-
     refund = state["refund_request"]
 
-    # Only eligible requests can reach the approval stage
     if refund["eligibility_status"] != "ELIGIBLE":
         return {
             "execution_status": "NOT_EXECUTED",
@@ -34,6 +33,12 @@ def human_approval(state: RefundState):
         "refund_details": refund,
         "available_actions": ["APPROVE", "REJECT"]
     })
+
+    if not isinstance(decision, dict):
+        return {
+            "approval_decision": "REJECT",
+            "approval_reason": "Invalid approval response."
+        }
 
     approval = decision.get("decision", "").upper()
 
@@ -49,20 +54,14 @@ def human_approval(state: RefundState):
     }
 
 
-# 3. Decide what happens after human review
-
 def route_after_approval(state: RefundState):
-
     if state.get("approval_decision") == "APPROVE":
         return "execute_refund"
 
     return "reject_refund"
 
 
-# 4. Simulate refund execution after approval
-
 def execute_refund(state: RefundState):
-
     refund = state["refund_request"]
 
     return {
@@ -75,10 +74,7 @@ def execute_refund(state: RefundState):
     }
 
 
-# 5. Handle rejected requests
-
 def reject_refund(state: RefundState):
-
     return {
         "execution_status": "REJECTED",
         "final_message": (
@@ -89,10 +85,8 @@ def reject_refund(state: RefundState):
     }
 
 
-# 6. Construct the LangGraph workflow
 
-def build_refund_approval_graph():
-
+def build_refund_approval_graph(checkpointer):
     builder = StateGraph(RefundState)
 
     builder.add_node("human_approval", human_approval)
@@ -113,61 +107,57 @@ def build_refund_approval_graph():
     builder.add_edge("execute_refund", END)
     builder.add_edge("reject_refund", END)
 
-    # Retain workflow state while waiting for approval
-    checkpointer = InMemorySaver()
-
     return builder.compile(checkpointer=checkpointer)
 
 
-# 7. Run a standalone approval demonstration
 
 def run_approval_demo():
+    graph_builder = build_refund_approval_graph()
 
-    graph = build_refund_approval_graph()
+    CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
 
-    refund_request = {
-        "order_id": "TEST-001",
-        "refund_amount": 29.99,
-        "currency": "BRL",
-        "eligibility_status": "ELIGIBLE",
-        "approval_status": "PENDING",
-        "execution_status": "NOT_EXECUTED"
-    }
+    with SqliteSaver.from_conn_string(str(CHECKPOINT_DB)) as checkpointer:
+        graph = graph_builder.compile(checkpointer=checkpointer)
 
-    config = {
-        "configurable": {
-            "thread_id": "refund-demo-001"
+        refund_request = {
+            "order_id": "TEST-001",
+            "refund_amount": 29.99,
+            "currency": "BRL",
+            "eligibility_status": "ELIGIBLE",
+            "approval_status": "PENDING",
+            "execution_status": "NOT_EXECUTED"
         }
-    }
 
-    print("\n========== REFUND APPROVAL WORKFLOW ==========")
+        config = {
+            "configurable": {
+                "thread_id": "refund-demo-001"
+            }
+        }
 
-    # First invocation pauses at the human approval node
-    result = graph.invoke(
-        {"refund_request": refund_request},
-        config=config
-    )
+        print("\n========== REFUND APPROVAL WORKFLOW ==========")
 
-    print("\n--- HUMAN APPROVAL REQUIRED ---")
-    print(result["__interrupt__"][0].value)
+        result = graph.invoke(
+            {"refund_request": refund_request},
+            config=config
+        )
 
-    decision = input("\nEnter APPROVE or REJECT: ").strip().upper()
-    reason = input("Enter reviewer reason: ").strip()
+        print("\n--- HUMAN APPROVAL REQUIRED ---")
+        print(result["__interrupt__"][0].value)
 
-    # Resume the paused workflow with the human decision
-    result = graph.invoke(
-        Command(
-            resume={
+        decision = input("\nEnter APPROVE or REJECT: ").strip().upper()
+        reason = input("Enter reviewer reason: ").strip()
+
+        result = graph.invoke(
+            {"__resume__": {
                 "decision": decision,
                 "reason": reason
-            }
-        ),
-        config=config
-    )
+            }},
+            config=config
+        )
 
-    print("\n========== FINAL RESULT ==========")
-    print(result["final_message"])
-    print("Execution status:", result["execution_status"])
+        print("\n========== FINAL RESULT ==========")
+        print(result["final_message"])
+        print("Execution status:", result["execution_status"])
 
 
 if __name__ == "__main__":

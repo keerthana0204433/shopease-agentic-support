@@ -17,3 +17,7 @@ data/olist/
 
 # macOS files
 .DS_Store
+
+# Local application databases
+data/*.db
+data/*.sqlite
